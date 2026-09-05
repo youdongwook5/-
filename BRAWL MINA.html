@@ -1,0 +1,1529 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mina 3D Arena</title>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        margin: 0;
+        overflow: hidden;
+        background: #111;
+        font-family: Arial, sans-serif;
+        user-select: none;
+    }
+
+    #game {
+        position: fixed;
+        inset: 0;
+    }
+
+    #ui {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+    }
+
+    #top {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        right: 20px;
+        display: flex;
+        justify-content: space-between;
+        color: white;
+        font-weight: bold;
+        text-shadow: 0 2px 4px #000;
+    }
+
+    .panel {
+        background: rgba(0,0,0,.45);
+        padding: 12px 16px;
+        border-radius: 12px;
+        backdrop-filter: blur(5px);
+    }
+
+    #healthOuter {
+        width: 240px;
+        height: 22px;
+        background: #222;
+        border: 2px solid white;
+        border-radius: 20px;
+        overflow: hidden;
+        margin-top: 5px;
+    }
+
+    #health {
+        height: 100%;
+        width: 100%;
+        background: #39e75f;
+        transition: width .15s;
+    }
+
+    #enemyHealthOuter {
+        width: 220px;
+        height: 18px;
+        background: #222;
+        border-radius: 20px;
+        overflow: hidden;
+        border: 2px solid white;
+        margin-top: 5px;
+    }
+
+    #enemyHealth {
+        height: 100%;
+        width: 100%;
+        background: #ff4040;
+    }
+
+    #instructions {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        color: white;
+        background: rgba(0,0,0,.5);
+        padding: 12px 16px;
+        border-radius: 12px;
+        line-height: 1.5;
+    }
+
+    #attackInfo {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        color: white;
+        text-align: right;
+        background: rgba(0,0,0,.5);
+        padding: 12px 16px;
+        border-radius: 12px;
+    }
+
+    #message {
+        position: absolute;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 60px;
+        font-weight: bold;
+        background: rgba(0,0,0,.55);
+        text-shadow: 0 4px 10px #000;
+    }
+
+    #crosshair {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 30px;
+        height: 30px;
+        border: 2px solid rgba(255,255,255,.8);
+        border-radius: 50%;
+    }
+
+    #crosshair::after {
+        content: "";
+        position: absolute;
+        width: 4px;
+        height: 4px;
+        background: white;
+        border-radius: 50%;
+        left: 11px;
+        top: 11px;
+    }
+</style>
+</head>
+
+<body>
+
+<div id="game"></div>
+
+<div id="ui">
+
+    <div id="top">
+
+        <div class="panel">
+            <div>미나 HP</div>
+            <div id="healthOuter">
+                <div id="health"></div>
+            </div>
+            <div id="hpText">10000 / 10000</div>
+        </div>
+
+        <div class="panel">
+            <div>적 AI HP</div>
+            <div id="enemyHealthOuter">
+                <div id="enemyHealth"></div>
+            </div>
+            <div id="enemyHpText">10000 / 10000</div>
+        </div>
+
+    </div>
+
+    <div id="crosshair"></div>
+
+    <div id="instructions">
+        <b>조작</b><br>
+        WASD : 이동<br>
+        마우스 : 공격 방향<br>
+        클릭 : 공격
+    </div>
+
+    <div id="attackInfo">
+        현재 공격: <b id="attackName">신발</b><br>
+        다음 연계: <span id="comboText">탬버린</span>
+    </div>
+
+    <div id="message">
+        <div id="messageText">승리!</div>
+    </div>
+
+</div>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js"
+    }
+}
+</script>
+
+<script type="module">
+
+import * as THREE from "three";
+
+/* =========================================
+   기본 설정
+========================================= */
+
+const scene = new THREE.Scene();
+
+scene.background = new THREE.Color(0x101522);
+
+scene.fog = new THREE.Fog(
+    0x101522,
+    30,
+    100
+);
+
+const camera = new THREE.PerspectiveCamera(
+    60,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    200
+);
+
+camera.position.set(0, 14, 14);
+
+const renderer = new THREE.WebGLRenderer({
+    antialias: true
+});
+
+renderer.setPixelRatio(
+    Math.min(window.devicePixelRatio, 2)
+);
+
+renderer.setSize(
+    window.innerWidth,
+    window.innerHeight
+);
+
+renderer.shadowMap.enabled = true;
+
+document
+    .getElementById("game")
+    .appendChild(renderer.domElement);
+
+
+/* =========================================
+   조명
+========================================= */
+
+const ambient = new THREE.HemisphereLight(
+    0xffffff,
+    0x333344,
+    2
+);
+
+scene.add(ambient);
+
+const sun = new THREE.DirectionalLight(
+    0xffffff,
+    3
+);
+
+sun.position.set(
+    10,
+    20,
+    10
+);
+
+sun.castShadow = true;
+
+scene.add(sun);
+
+
+/* =========================================
+   경기장
+========================================= */
+
+const floorGeometry =
+    new THREE.PlaneGeometry(70, 70);
+
+const floorMaterial =
+    new THREE.MeshStandardMaterial({
+        color: 0x26384a,
+        roughness: .8
+    });
+
+const floor =
+    new THREE.Mesh(
+        floorGeometry,
+        floorMaterial
+    );
+
+floor.rotation.x = -Math.PI / 2;
+
+floor.receiveShadow = true;
+
+scene.add(floor);
+
+
+/* 경기장 격자 */
+
+const grid =
+    new THREE.GridHelper(
+        70,
+        35,
+        0x5a7188,
+        0x354759
+    );
+
+grid.position.y = .02;
+
+scene.add(grid);
+
+
+/* =========================================
+   플레이어 생성
+========================================= */
+
+const player = new THREE.Group();
+
+scene.add(player);
+
+player.position.set(
+    0,
+    1,
+    10
+);
+
+
+/* 몸 */
+
+const body =
+    new THREE.Mesh(
+        new THREE.CapsuleGeometry(
+            .65,
+            1.2,
+            6,
+            12
+        ),
+        new THREE.MeshStandardMaterial({
+            color: 0xff66aa
+        })
+    );
+
+body.castShadow = true;
+
+body.position.y = 1;
+
+player.add(body);
+
+
+/* 머리 */
+
+const head =
+    new THREE.Mesh(
+        new THREE.SphereGeometry(
+            .48,
+            20,
+            20
+        ),
+        new THREE.MeshStandardMaterial({
+            color: 0xffc9a9
+        })
+    );
+
+head.position.y = 2;
+
+head.castShadow = true;
+
+player.add(head);
+
+
+/* 신발 */
+
+const shoe =
+    new THREE.Mesh(
+        new THREE.BoxGeometry(
+            .7,
+            .25,
+            1.1
+        ),
+        new THREE.MeshStandardMaterial({
+            color: 0xffd52e,
+            emissive: 0x442200
+        })
+    );
+
+shoe.position.set(
+    0,
+    .45,
+    .7
+);
+
+shoe.rotation.x = -.2;
+
+shoe.castShadow = true;
+
+player.add(shoe);
+
+
+/* =========================================
+   적 AI
+========================================= */
+
+const enemy = new THREE.Group();
+
+scene.add(enemy);
+
+enemy.position.set(
+    0,
+    1,
+    -12
+);
+
+
+/* 적 몸 */
+
+const enemyBody =
+    new THREE.Mesh(
+        new THREE.CapsuleGeometry(
+            .75,
+            1.3,
+            6,
+            12
+        ),
+        new THREE.MeshStandardMaterial({
+            color: 0x5555ff
+        })
+    );
+
+enemyBody.position.y = 1;
+
+enemyBody.castShadow = true;
+
+enemy.add(enemyBody);
+
+
+/* 적 머리 */
+
+const enemyHead =
+    new THREE.Mesh(
+        new THREE.SphereGeometry(
+            .5,
+            20,
+            20
+        ),
+        new THREE.MeshStandardMaterial({
+            color: 0xddddff
+        })
+    );
+
+enemyHead.position.y = 2;
+
+enemyHead.castShadow = true;
+
+enemy.add(enemyHead);
+
+
+/* =========================================
+   게임 변수
+========================================= */
+
+const playerData = {
+
+    hp: 10000,
+    maxHp: 10000,
+
+    speed: 8,
+
+    damage: 2000,
+
+    combo: 0,
+
+    comboTimer: 0,
+
+    alive: true
+
+};
+
+const enemyData = {
+
+    hp: 10000,
+
+    maxHp: 10000,
+
+    speed: 2.5,
+
+    shootTimer: 0,
+
+    alive: true
+
+};
+
+
+/* =========================================
+   키보드
+========================================= */
+
+const keys = {};
+
+window.addEventListener(
+    "keydown",
+    e => {
+        keys[e.key.toLowerCase()] = true;
+    }
+);
+
+window.addEventListener(
+    "keyup",
+    e => {
+        keys[e.key.toLowerCase()] = false;
+    }
+);
+
+
+/* =========================================
+   마우스 조준
+========================================= */
+
+const mouse =
+    new THREE.Vector2();
+
+window.addEventListener(
+    "mousemove",
+    e => {
+
+        mouse.x =
+            (e.clientX / window.innerWidth) * 2 - 1;
+
+        mouse.y =
+            -(e.clientY / window.innerHeight) * 2 + 1;
+
+    }
+);
+
+
+/* =========================================
+   공격 방향
+========================================= */
+
+function getAttackDirection() {
+
+    const direction =
+        new THREE.Vector3(
+            mouse.x,
+            0,
+            -mouse.y
+        );
+
+    if (direction.lengthSq() < .01) {
+
+        direction.set(
+            0,
+            0,
+            -1
+        );
+
+    }
+
+    direction.normalize();
+
+    return direction;
+}
+
+
+/* =========================================
+   투사체 생성
+========================================= */
+
+const projectiles = [];
+
+function createProjectile(
+    position,
+    direction,
+    color,
+    damage,
+    speed = 20,
+    size = .25
+) {
+
+    const mesh =
+        new THREE.Mesh(
+            new THREE.SphereGeometry(
+                size,
+                12,
+                12
+            ),
+            new THREE.MeshStandardMaterial({
+                color,
+                emissive: color,
+                emissiveIntensity: 2
+            })
+        );
+
+    mesh.position.copy(position);
+
+    scene.add(mesh);
+
+    projectiles.push({
+
+        mesh,
+        direction:
+            direction.clone(),
+
+        speed,
+
+        damage,
+
+        owner: "player",
+
+        life: 2
+
+    });
+
+}
+
+
+/* =========================================
+   신발 공격
+========================================= */
+
+function shoeAttack() {
+
+    const dir =
+        getAttackDirection();
+
+    /* 신발 발사 */
+
+    createProjectile(
+        player.position.clone().add(
+            new THREE.Vector3(0, 1, 0)
+        ),
+        dir,
+        0xffd52e,
+        2000,
+        28,
+        .35
+    );
+
+    /* 대시 */
+
+    const dashDistance = 3;
+
+    player.position.add(
+        dir.clone().multiplyScalar(
+            dashDistance
+        )
+    );
+
+    /* 플레이어 방향 */
+
+    player.rotation.y =
+        Math.atan2(
+            dir.x,
+            dir.z
+        );
+
+}
+
+
+/* =========================================
+   부채꼴 이펙트
+========================================= */
+
+function createFanEffect(
+    position,
+    direction,
+    angle,
+    radius,
+    color
+) {
+
+    const geometry =
+        new THREE.CircleGeometry(
+            radius,
+            32,
+            -angle / 2,
+            angle
+        );
+
+    const material =
+        new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity: .38,
+            side: THREE.DoubleSide
+        });
+
+    const fan =
+        new THREE.Mesh(
+            geometry,
+            material
+        );
+
+    fan.position.copy(position);
+
+    fan.position.y = .08;
+
+    const rot =
+        Math.atan2(
+            direction.x,
+            direction.z
+        );
+
+    fan.rotation.x =
+        -Math.PI / 2;
+
+    fan.rotation.z =
+        -rot - Math.PI / 2;
+
+    scene.add(fan);
+
+    setTimeout(() => {
+
+        scene.remove(fan);
+
+        geometry.dispose();
+        material.dispose();
+
+    }, 250);
+
+}
+
+
+/* =========================================
+   탬버린 공격
+========================================= */
+
+function tambourineAttack() {
+
+    const dir =
+        getAttackDirection();
+
+    createFanEffect(
+        player.position,
+        dir,
+        THREE.MathUtils.degToRad(50),
+        5,
+        0xff66dd
+    );
+
+    /* 적이 부채꼴 안에 있는지 검사 */
+
+    damageEnemyInCone(
+        player.position,
+        dir,
+        5,
+        50,
+        2500
+    );
+
+}
+
+
+/* =========================================
+   3연속 칼날 공격
+========================================= */
+
+function bladeAttack() {
+
+    const dir =
+        getAttackDirection();
+
+    createFanEffect(
+        player.position,
+        dir,
+        THREE.MathUtils.degToRad(90),
+        7,
+        0x66ddff
+    );
+
+    /* 3개의 칼날 모양 에너지 */
+    
+    const angles = [
+        -30,
+        0,
+        30
+    ];
+
+    for (const angle of angles) {
+
+        const rad =
+            THREE.MathUtils.degToRad(angle);
+
+        const d =
+            dir.clone();
+
+        d.applyAxisAngle(
+            new THREE.Vector3(0,1,0),
+            rad
+        );
+
+        createProjectile(
+            player.position.clone().add(
+                new THREE.Vector3(0,1,0)
+            ),
+            d,
+            0x66ddff,
+            3000,
+            24,
+            .22
+        );
+
+    }
+
+}
+
+
+/* =========================================
+   부채꼴 피해 판정
+========================================= */
+
+function damageEnemyInCone(
+    origin,
+    direction,
+    radius,
+    angleDeg,
+    damage
+) {
+
+    if (!enemyData.alive)
+        return;
+
+    const toEnemy =
+        enemy.position.clone()
+        .sub(origin);
+
+    toEnemy.y = 0;
+
+    const distance =
+        toEnemy.length();
+
+    if (distance > radius)
+        return;
+
+    toEnemy.normalize();
+
+    const dot =
+        direction.dot(toEnemy);
+
+    const angle =
+        Math.acos(
+            THREE.MathUtils.clamp(
+                dot,
+                -1,
+                1
+            )
+        );
+
+    if (
+        angle <=
+        THREE.MathUtils.degToRad(
+            angleDeg / 2
+        )
+    ) {
+
+        damageEnemy(damage);
+
+    }
+
+}
+
+
+/* =========================================
+   공격 연계
+========================================= */
+
+function playerAttack() {
+
+    if (!playerData.alive)
+        return;
+
+    /* 첫 공격 */
+
+    if (playerData.combo === 0) {
+
+        shoeAttack();
+
+        playerData.combo = 1;
+
+        playerData.comboTimer = 1.5;
+
+        document.getElementById(
+            "attackName"
+        ).textContent = "신발";
+
+        document.getElementById(
+            "comboText"
+        ).textContent = "탬버린";
+
+        return;
+
+    }
+
+
+    /* 두 번째 */
+
+    if (playerData.combo === 1) {
+
+        tambourineAttack();
+
+        playerData.combo = 2;
+
+        playerData.comboTimer = 1.5;
+
+        document.getElementById(
+            "attackName"
+        ).textContent = "탬버린";
+
+        document.getElementById(
+            "comboText"
+        ).textContent = "3연속 칼날";
+
+        return;
+
+    }
+
+
+    /* 세 번째 */
+
+    if (playerData.combo === 2) {
+
+        bladeAttack();
+
+        playerData.combo = 0;
+
+        playerData.comboTimer = 0;
+
+        document.getElementById(
+            "attackName"
+        ).textContent = "신발";
+
+        document.getElementById(
+            "comboText"
+        ).textContent = "탬버린";
+
+    }
+
+}
+
+
+/* =========================================
+   클릭 공격
+========================================= */
+
+window.addEventListener(
+    "mousedown",
+    e => {
+
+        if (e.button === 0) {
+
+            playerAttack();
+
+        }
+
+    }
+);
+
+
+/* =========================================
+   적 체력
+========================================= */
+
+function damageEnemy(damage) {
+
+    if (!enemyData.alive)
+        return;
+
+    enemyData.hp -= damage;
+
+    enemyData.hp =
+        Math.max(
+            0,
+            enemyData.hp
+        );
+
+    updateUI();
+
+    createHitEffect(
+        enemy.position.clone()
+        .add(
+            new THREE.Vector3(0,1.5,0)
+        )
+    );
+
+    if (enemyData.hp <= 0) {
+
+        enemyData.alive = false;
+
+        scene.remove(enemy);
+
+        document.getElementById(
+            "message"
+        ).style.display = "flex";
+
+        document.getElementById(
+            "messageText"
+        ).textContent =
+            "승리! 🎉";
+
+    }
+
+}
+
+
+/* =========================================
+   플레이어 피해
+========================================= */
+
+function damagePlayer(damage) {
+
+    if (!playerData.alive)
+        return;
+
+    playerData.hp -= damage;
+
+    playerData.hp =
+        Math.max(
+            0,
+            playerData.hp
+        );
+
+    updateUI();
+
+    if (playerData.hp <= 0) {
+
+        playerData.alive = false;
+
+        document.getElementById(
+            "message"
+        ).style.display = "flex";
+
+        document.getElementById(
+            "messageText"
+        ).textContent =
+            "패배!";
+
+    }
+
+}
+
+
+/* =========================================
+   히트 이펙트
+========================================= */
+
+function createHitEffect(position) {
+
+    const geometry =
+        new THREE.SphereGeometry(
+            .5,
+            12,
+            12
+        );
+
+    const material =
+        new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true
+        });
+
+    const effect =
+        new THREE.Mesh(
+            geometry,
+            material
+        );
+
+    effect.position.copy(position);
+
+    scene.add(effect);
+
+    let scale = 1;
+
+    const timer =
+        setInterval(() => {
+
+            scale += .2;
+
+            effect.scale.setScalar(
+                scale
+            );
+
+            material.opacity -= .12;
+
+            if (
+                material.opacity <= 0
+            ) {
+
+                clearInterval(timer);
+
+                scene.remove(effect);
+
+                geometry.dispose();
+                material.dispose();
+
+            }
+
+        }, 30);
+
+}
+
+
+/* =========================================
+   적 AI
+========================================= */
+
+function updateEnemy(delta) {
+
+    if (!enemyData.alive)
+        return;
+
+    const direction =
+        player.position.clone()
+        .sub(enemy.position);
+
+    direction.y = 0;
+
+    const distance =
+        direction.length();
+
+    direction.normalize();
+
+    /* 플레이어 추적 */
+
+    if (distance > 7) {
+
+        enemy.position.add(
+            direction
+            .multiplyScalar(
+                enemyData.speed * delta
+            )
+        );
+
+    }
+
+    /* 플레이어 바라보기 */
+
+    enemy.rotation.y =
+        Math.atan2(
+            direction.x,
+            direction.z
+        );
+
+    /* 에너지 탄환 발사 */
+
+    enemyData.shootTimer -= delta;
+
+    if (
+        enemyData.shootTimer <= 0 &&
+        distance < 25
+    ) {
+
+        enemyShoot(direction);
+
+        enemyData.shootTimer =
+            1.5;
+
+    }
+
+}
+
+
+/* =========================================
+   적 공격
+========================================= */
+
+function enemyShoot(direction) {
+
+    createProjectile(
+        enemy.position.clone()
+        .add(
+            new THREE.Vector3(0,1.2,0)
+        ),
+        direction,
+        0xff4444,
+        3000,
+        13,
+        .3
+    );
+
+}
+
+
+/* =========================================
+   투사체 업데이트
+========================================= */
+
+function updateProjectiles(delta) {
+
+    for (
+        let i = projectiles.length - 1;
+        i >= 0;
+        i--
+    ) {
+
+        const p =
+            projectiles[i];
+
+        p.mesh.position.add(
+            p.direction.clone()
+            .multiplyScalar(
+                p.speed * delta
+            )
+        );
+
+        p.life -= delta;
+
+        /* 플레이어 투사체 */
+
+        if (
+            p.owner === "player"
+        ) {
+
+            if (
+                enemyData.alive &&
+                p.mesh.position.distanceTo(
+                    enemy.position
+                ) < 1.3
+            ) {
+
+                damageEnemy(
+                    p.damage
+                );
+
+                removeProjectile(i);
+
+                continue;
+
+            }
+
+        }
+
+        /* 적 투사체 */
+
+        else {
+
+            if (
+                playerData.alive &&
+                p.mesh.position.distanceTo(
+                    player.position
+                ) < 1.3
+            ) {
+
+                damagePlayer(
+                    p.damage
+                );
+
+                removeProjectile(i);
+
+                continue;
+
+            }
+
+        }
+
+        if (
+            p.life <= 0 ||
+            Math.abs(
+                p.mesh.position.x
+            ) > 40 ||
+            Math.abs(
+                p.mesh.position.z
+            ) > 40
+        ) {
+
+            removeProjectile(i);
+
+        }
+
+    }
+
+}
+
+
+/* =========================================
+   투사체 제거
+========================================= */
+
+function removeProjectile(i) {
+
+    const p =
+        projectiles[i];
+
+    scene.remove(
+        p.mesh
+    );
+
+    p.mesh.geometry.dispose();
+    p.mesh.material.dispose();
+
+    projectiles.splice(
+        i,
+        1
+    );
+
+}
+
+
+/* =========================================
+   이동
+========================================= */
+
+function updatePlayer(delta) {
+
+    if (!playerData.alive)
+        return;
+
+    const move =
+        new THREE.Vector3();
+
+    if (keys["w"])
+        move.z -= 1;
+
+    if (keys["s"])
+        move.z += 1;
+
+    if (keys["a"])
+        move.x -= 1;
+
+    if (keys["d"])
+        move.x += 1;
+
+    if (
+        move.lengthSq() > 0
+    ) {
+
+        move.normalize();
+
+        player.position.add(
+            move.multiplyScalar(
+                playerData.speed *
+                delta
+            )
+        );
+
+        player.rotation.y =
+            Math.atan2(
+                move.x,
+                move.z
+            );
+
+    }
+
+    /* 경기장 밖으로 못 나가게 */
+
+    player.position.x =
+        THREE.MathUtils.clamp(
+            player.position.x,
+            -32,
+            32
+        );
+
+    player.position.z =
+        THREE.MathUtils.clamp(
+            player.position.z,
+            -32,
+            32
+        );
+
+}
+
+
+/* =========================================
+   연계 타이머
+========================================= */
+
+function updateCombo(delta) {
+
+    if (
+        playerData.combo > 0
+    ) {
+
+        playerData.comboTimer -= delta;
+
+        if (
+            playerData.comboTimer <= 0
+        ) {
+
+            playerData.combo = 0;
+
+            document.getElementById(
+                "attackName"
+            ).textContent = "신발";
+
+            document.getElementById(
+                "comboText"
+            ).textContent = "탬버린";
+
+        }
+
+    }
+
+}
+
+
+/* =========================================
+   UI
+========================================= */
+
+function updateUI() {
+
+    const hpPercent =
+        playerData.hp /
+        playerData.maxHp *
+        100;
+
+    document.getElementById(
+        "health"
+    ).style.width =
+        hpPercent + "%";
+
+    document.getElementById(
+        "hpText"
+    ).textContent =
+        `${playerData.hp} / ${playerData.maxHp}`;
+
+
+    const enemyPercent =
+        enemyData.hp /
+        enemyData.maxHp *
+        100;
+
+    document.getElementById(
+        "enemyHealth"
+    ).style.width =
+        enemyPercent + "%";
+
+    document.getElementById(
+        "enemyHpText"
+    ).textContent =
+        `${enemyData.hp} / ${enemyData.maxHp}`;
+
+}
+
+
+/* =========================================
+   카메라
+========================================= */
+
+function updateCamera() {
+
+    const target =
+        player.position.clone();
+
+    const desired =
+        player.position.clone()
+        .add(
+            new THREE.Vector3(
+                0,
+                14,
+                14
+            )
+        );
+
+    camera.position.lerp(
+        desired,
+        .08
+    );
+
+    camera.lookAt(
+        target
+    );
+
+}
+
+
+/* =========================================
+   애니메이션
+========================================= */
+
+const clock =
+    new THREE.Clock();
+
+function animate() {
+
+    requestAnimationFrame(
+        animate
+    );
+
+    const delta =
+        Math.min(
+            clock.getDelta(),
+            .05
+        );
+
+    updatePlayer(delta);
+
+    updateEnemy(delta);
+
+    updateProjectiles(delta);
+
+    updateCombo(delta);
+
+    updateCamera();
+
+    renderer.render(
+        scene,
+        camera
+    );
+
+}
+
+animate();
+
+
+/* =========================================
+   화면 크기 변경
+========================================= */
+
+window.addEventListener(
+    "resize",
+    () => {
+
+        camera.aspect =
+            window.innerWidth /
+            window.innerHeight;
+
+        camera.updateProjectionMatrix();
+
+        renderer.setSize(
+            window.innerWidth,
+            window.innerHeight
+        );
+
+    }
+);
+
+</script>
+
+</body>
+</html>
